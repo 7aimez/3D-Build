@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimalist Minecraft</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background for minimalism */
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: calc(100vh - 80px); /* Adjust height for hotbar */
+            background-color: #2d3748; /* Slightly lighter background for scene */
+        }
+        #hotbar {
+            height: 80px;
+            background-color: #2d3748; /* Match scene background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-top: 2px solid #4a5568; /* Subtle border */
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1), 0 -2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 0 20px; /* Add some padding */
+        }
+        .hotbar-item {
+            width: 60px;
+            height: 60px;
+            margin: 0 10px;
+            background-color: #4a5568; /* Item background */
+            border: 2px solid #4a5568;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+            position: relative; /* For number label positioning */
+        }
+        .hotbar-item.selected {
+            border-color: #63b3ed; /* Highlight selected item */
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .hotbar-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 10px -2px rgba(0, 0, 0, 0.15);
+        }
+        .block-preview {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            background-color: currentColor; /* Uses the color set by data-color */
+            /* For delete icon */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: #ef4444; /* Red for delete icon */
+        }
+        #message-box {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none; /* Allows clicks to pass through */
+        }
+        #message-box.show {
+            opacity: 1;
+        }
+        .action-button {
+            background-color: #4a5568; /* Grayish background */
+            color: white;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            margin: 0 5px; /* Space between action buttons */
+            border: none;
+        }
+        .action-button:hover:not(:disabled) {
+            background-color: #63b3ed; /* Blue on hover */
+            transform: translateY(-2px);
+        }
+        .action-button:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+        }
+        .action-button:disabled {
+            background-color: #2d3748; /* Darker, less prominent when disabled */
+            color: #718096; /* Lighter text for disabled state */
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Modal Styles */
+        #saveLoadModal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        #saveLoadModal.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #saveLoadModal .bg-gray-700 {
+            background-color: #2d3748; /* Match hotbar/canvas background */
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        #saveLoadString {
+            resize: vertical; /* Allow vertical resizing */
+            min-height: 80px;
+            max-height: 200px;
+        }
+        #copySaveStringButton {
+            background-color: #4299e1; /* Blue */
+            margin-right: 8px;
+        }
+        #pasteLoadStringButton {
+            background-color: #48bb78; /* Green */
+            margin-right: 8px;
+        }
+        #closeModalButton {
+            background-color: #ef4444; /* Red */
+        }
+    </style>
+</head>
+<body>
+    <div id="message-box"></div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hotbar">
+        <button id="undoButton" class="action-button" disabled>Undo</button>
+        <button id="redoButton" class="action-button" disabled>Redo</button>
+        <button id="saveButton" class="action-button">Save</button>
+        <button id="loadButton" class="action-button">Load</button>
+    </div>
+
+    <div id="saveLoadModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-gray-700 p-6 rounded-lg shadow-xl w-96">
+            <h3 class="text-lg font-bold text-white mb-4" id="modalTitle">World Data</h3>
+            <textarea id="saveLoadString" class="w-full h-32 bg-gray-800 text-gray-200 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Your save string will appear here or paste a string to load..."></textarea>
+            <div class="flex justify-end mt-4 space-x-2">
+                <button id="copySaveStringButton" class="action-button">Copy</button>
+                <button id="pasteLoadStringButton" class="action-button">Load from String</button>
+                <button id="closeModalButton" class="action-button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Global variables for Firebase configuration and app ID (provided by the Canvas environment)
+        // These are included as per instructions, though not used in this specific app
+        // as it doesn't involve data persistence.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- Core Three.js Setup ---
+        let scene, camera, renderer, controls;
+        const blocks = []; // Array to store placed blocks (Three.js meshes)
+        let groundMesh; // Reference to the ground mesh
+
+        // --- Block Types and Hotbar ---
+        const blockTypes = [
+            { name: 'Grass', color: '#6B8E23', material: new THREE.MeshLambertMaterial({ color: '#6B8E23' }) },
+            { name: 'Dirt', color: '#8B4513', material: new THREE.MeshLambertMaterial({ color: '#8B4513' }) },
+            { name: 'Stone', color: '#808080', material: new THREE.MeshLambertMaterial({ color: '#808080' }) },
+            { name: 'Wood', color: '#A0522D', material: new THREE.MeshLambertMaterial({ color: '#A0522D' }) },
+            { name: 'Sand', color: '#F4A460', material: new THREE.MeshLambertMaterial({ color: '#F4A460' }) },
+            // NEW: Delete tool slot
+            { name: 'Delete', color: '#333333', isTool: true, icon: 'X' } // isTool flag and icon for delete
+        ];
+        let selectedBlockTypeIndex = 0; // Index of the currently selected block type
+
+        const blockSize = 1; // Size of each block
+        const gridStep = blockSize; // Step for grid placement (currently 1)
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(); // Used for both mouse and touch coordinates
+        let canvasRect; // To store canvas dimensions for accurate mouse/touch coordinates
+
+        // --- Drag/Tap Detection Variables ---
+        let isDragging = false;
+        let initialClickX = 0;
+        let initialClickY = 0;
+        const DRAG_THRESHOLD = 5; // Pixels: if movement exceeds this, it's considered a drag
+
+        // --- Placement Distance Limit ---
+        const MAX_PLACEMENT_DISTANCE = 10; // Maximum distance in world units to place a block
+
+        // --- Undo/Redo History ---
+        const undoStack = [];
+        const redoStack = [];
+        let undoButton, redoButton; // References to the UI buttons
+
+        // --- Save/Load Variables ---
+        let saveButton, loadButton, saveLoadModal, saveLoadStringInput, copySaveStringButton, pasteLoadStringButton, closeModalButton;
+        let currentSaveString = ""; // Stores the latest autosaved or manually saved string
+        const AUTOSAVE_INTERVAL_MS = 30000; // Autosave every 30 seconds
+        let autosaveIntervalId;
+
+        // --- Message Box Function ---
+        function showMessage(message, duration = 2000) {
+            const messageBox = document.getElementById('message-box');
+            messageBox.textContent = message;
+            messageBox.classList.add('show');
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, duration);
+        }
+
+        // --- Update Undo/Redo Button States ---
+        function updateUndoRedoButtons() {
+            if (undoButton && redoButton) { // Ensure buttons are initialized
+                undoButton.disabled = undoStack.length === 0;
+                redoButton.disabled = redoStack.length === 0;
+            }
+        }
+
+        // --- Save World Function ---
+        function saveWorld() {
+            const worldData = blocks.map(block => ({
+                x: block.position.x,
+                y: block.position.y,
+                z: block.position.z,
+                typeIndex: block.userData.blockTypeIndex
+            }));
+            currentSaveString = JSON.stringify(worldData);
+            console.log("World saved:", currentSaveString);
+            showMessage("World Autosaved!", 1500);
+            return currentSaveString;
+        }
+
+        // --- Load World Function ---
+        function loadWorld(saveString) {
+            if (!saveString) {
+                showMessage("No save data provided!", 2000);
+                return;
+            }
+
+            try {
+                const worldData = JSON.parse(saveString);
+
+                // Clear current world
+                blocks.forEach(block => scene.remove(block));
+                blocks.length = 0; // Clear the array
+
+                // Clear undo/redo history for the new world
+                undoStack.length = 0;
+                redoStack.length = 0;
+                updateUndoRedoButtons();
+
+                // Recreate blocks from saved data
+                worldData.forEach(data => {
+                    const blockType = blockTypes[data.typeIndex];
+                    if (blockType && !blockType.isTool) { // Ensure it's a valid block type and not a tool
+                        const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+                        const material = blockType.material;
+                        const mesh = new THREE.Mesh(geometry, material);
+                        mesh.position.set(data.x, data.y, data.z);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        mesh.name = `block_${data.typeIndex}_${data.x}_${data.y}_${data.z}`; // Give it a unique name
+                        mesh.userData.blockTypeIndex = data.typeIndex; // Store original type
+                        scene.add(mesh);
+                        blocks.push(mesh);
+                    }
+                });
+                showMessage("World loaded successfully!", 2000);
+                console.log("World loaded from string.");
+            } catch (error) {
+                showMessage("Failed to load world: Invalid save data.", 3000);
+                console.error("Error loading world:", error);
+            }
+        }
+
+        // --- Initialization Function ---
+        function init() {
+            const canvas = document.getElementById('gameCanvas');
+            const hotbar = document.getElementById('hotbar');
+            undoButton = document.getElementById('undoButton');
+            redoButton = document.getElementById('redoButton');
+            saveButton = document.getElementById('saveButton');
+            loadButton = document.getElementById('loadButton');
+            saveLoadModal = document.getElementById('saveLoadModal');
+            saveLoadStringInput = document.getElementById('saveLoadString');
+            copySaveStringButton = document.getElementById('copySaveStringButton');
+            pasteLoadStringButton = document.getElementById('pasteLoadStringButton');
+            closeModalButton = document.getElementById('closeModalButton');
+
+            // Get initial canvas dimensions for mouse/touch calculations
+            canvasRect = canvas.getBoundingClientRect();
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2d3748); // Match CSS background
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 80), 0.1, 1000);
+            camera.position.set(5, 5, 5); // Initial camera position
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight - 80);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // OrbitControls for easy camera navigation
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 2;
+            controls.maxDistance = 50;
+            controls.maxPolarAngle = Math.PI / 2; // Prevent camera from going below ground
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Soft ambient light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Stronger directional light
+            directionalLight.position.set(10, 15, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -20;
+            directionalLight.shadow.camera.right = 20;
+            directionalLight.shadow.camera.top = 20;
+            directionalLight.shadow.camera.bottom = -20;
+            scene.add(directionalLight);
+
+            // --- Visible Ground Plane (The "Base") ---
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50, side: THREE.DoubleSide });
+            groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+            groundMesh.rotation.x = -Math.PI / 2; // Rotate to lie flat
+            groundMesh.receiveShadow = true;
+            groundMesh.name = 'ground'; // Give it a name for easier identification in raycasting
+            scene.add(groundMesh);
+
+            // --- Visible Grid Helper ---
+            const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444); // Size, divisions, center line color, grid color
+            gridHelper.material.opacity = 0.5;
+            gridHelper.material.transparent = true;
+            gridHelper.position.y = 0.01; // Slightly above the ground mesh to avoid z-fighting
+            scene.add(gridHelper);
+
+            // Create Hotbar UI
+            blockTypes.forEach((type, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `hotbar-item ${index === selectedBlockTypeIndex ? 'selected' : ''}`;
+                itemDiv.dataset.index = index;
+                itemDiv.title = type.name;
+
+                const blockPreview = document.createElement('div');
+                blockPreview.className = 'block-preview';
+                
+                if (type.isTool && type.icon) {
+                    blockPreview.innerHTML = type.icon; // Set icon for tools like delete
+                    blockPreview.style.backgroundColor = type.color; // Apply background color for tool slot
+                } else {
+                    blockPreview.style.backgroundColor = type.color; // Apply block color
+                }
+                itemDiv.appendChild(blockPreview);
+
+                const numberLabel = document.createElement('span');
+                numberLabel.textContent = index + 1;
+                numberLabel.className = 'absolute bottom-1 right-1 text-xs font-bold text-gray-200';
+                itemDiv.appendChild(numberLabel);
+
+                itemDiv.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent hotbar click from triggering canvas tap
+                    selectBlockType(index);
+                });
+                hotbar.insertBefore(itemDiv, undoButton); // Insert before undo button
+            });
+
+            // Event Listeners for placement and camera control
+            window.addEventListener('resize', onWindowResize);
+
+            // Mouse events for desktop
+            canvas.addEventListener('mousedown', onMouseDown, false);
+            canvas.addEventListener('mousemove', onMouseMove, false);
+            canvas.addEventListener('mouseup', onMouseUp, false);
+
+            // Touch events for mobile/tablet
+            canvas.addEventListener('touchstart', onTouchStart, { passive: false }); // passive:false to allow preventDefault
+            canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+            canvas.addEventListener('touchend', onTouchEnd, false);
+
+            // Undo/Redo Button Listeners
+            undoButton.addEventListener('click', undo);
+            redoButton.addEventListener('click', redo);
+
+            // Save/Load Button Listeners
+            saveButton.addEventListener('click', () => {
+                const savedData = saveWorld(); // Manually save and get the string
+                saveLoadStringInput.value = savedData;
+                saveLoadModal.classList.remove('hidden');
+                document.getElementById('modalTitle').textContent = "Save World Data";
+                copySaveStringButton.style.display = 'inline-block'; // Show copy button
+                pasteLoadStringButton.style.display = 'none'; // Hide paste button
+                saveLoadStringInput.readOnly = true; // Make it read-only for saving
+                saveLoadStringInput.select(); // Select text for easy copying
+            });
+
+            loadButton.addEventListener('click', () => {
+                saveLoadStringInput.value = ""; // Clear input for pasting
+                saveLoadModal.classList.remove('hidden');
+                document.getElementById('modalTitle').textContent = "Load World Data";
+                copySaveStringButton.style.display = 'none'; // Hide copy button
+                pasteLoadStringButton.style.display = 'inline-block'; // Show paste button
+                saveLoadStringInput.readOnly = false; // Make it editable for loading
+                saveLoadStringInput.focus(); // Focus for pasting
+            });
+
+            copySaveStringButton.addEventListener('click', () => {
+                saveLoadStringInput.select();
+                document.execCommand('copy'); // Use execCommand for broader compatibility in iframes
+                showMessage("Save string copied to clipboard!", 1500);
+            });
+
+            pasteLoadStringButton.addEventListener('click', () => {
+                const pastedString = saveLoadStringInput.value;
+                loadWorld(pastedString);
+                saveLoadModal.classList.add('hidden'); // Hide modal after loading
+            });
+
+            closeModalButton.addEventListener('click', () => {
+                saveLoadModal.classList.add('hidden');
+            });
+
+            document.addEventListener('keydown', onKeyDown, false); // For number key selection
+
+            // Initial message
+            showMessage("Tap on the screen to place/delete blocks. Use number keys or tap hotbar to select tool.", 5000);
+            updateUndoRedoButtons(); // Initial state for buttons
+
+            // Start autosave
+            autosaveIntervalId = setInterval(saveWorld, AUTOSAVE_INTERVAL_MS);
+        }
+
+        // --- Block Selection Function ---
+        function selectBlockType(index) {
+            selectedBlockTypeIndex = index;
+            const hotbarItems = document.querySelectorAll('.hotbar-item');
+            hotbarItems.forEach((item, i) => {
+                if (i === selectedBlockTypeIndex) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+            showMessage(`Selected: ${blockTypes[selectedBlockTypeIndex].name}`);
+        }
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / (window.innerHeight - 80);
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight - 80);
+            // Update canvas dimensions on resize
+            canvasRect = document.getElementById('gameCanvas').getBoundingClientRect();
+            console.log("Canvas resized. New dimensions:", canvasRect.width, canvasRect.height);
+        }
+
+        function onMouseMove(event) {
+            // This is primarily for OrbitControls to work correctly with mouse
+            mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+            mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+
+            // Check if a drag has started (only if left button is pressed)
+            if (event.buttons === 1) {
+                const dx = event.clientX - initialClickX;
+                const dy = event.clientY - initialClickY;
+                if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+                    isDragging = true;
+                }
+            }
+        }
+
+        function onMouseDown(event) {
+            if (event.button === 0) { // Left-click
+                initialClickX = event.clientX;
+                initialClickY = event.clientY;
+                isDragging = false; // Assume not dragging initially
+            }
+        }
+
+        function onMouseUp(event) {
+            if (event.button === 0) { // Left-click released
+                if (!isDragging) {
+                    // It was a click/tap, not a drag, so handle interaction
+                    // Use the coordinates from the mouseup event
+                    mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+                    mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+                    handleInteraction(); // Call the new generalized handler
+                }
+                isDragging = false; // Reset for next interaction
+            }
+        }
+
+        // Touch Events
+        function onTouchStart(event) {
+            if (event.touches.length === 1) {
+                // Single touch, potential tap
+                initialClickX = event.touches[0].clientX;
+                initialClickY = event.touches[0].clientY;
+                isDragging = false; // Assume not dragging initially
+            } else if (event.touches.length > 1) {
+                // Multi-touch, definitely a drag for camera controls
+                isDragging = true;
+            }
+            // Prevent default behavior (like scrolling/zooming) to allow OrbitControls and our logic
+            event.preventDefault();
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 1) {
+                const dx = event.touches[0].clientX - initialClickX;
+                const dy = event.touches[0].clientY - initialClickY;
+                if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+                    isDragging = true;
+                }
+            } else if (event.touches.length > 1) {
+                isDragging = true; // Confirm dragging if multi-touch
+            }
+            // Prevent default behavior (like scrolling/zooming)
+            event.preventDefault();
+        }
+
+        function onTouchEnd(event) {
+            // Check if it was a single tap (no dragging occurred)
+            // event.changedTouches.length === 1 helps identify if the primary touch ended
+            if (!isDragging && event.changedTouches.length === 1) {
+                // It was a tap, not a drag, so handle interaction
+                // Use the coordinates from the touch that just ended
+                const touch = event.changedTouches[0];
+                mouse.x = ((touch.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
+                mouse.y = -((touch.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
+                handleInteraction(); // Call the new generalized handler
+            }
+            isDragging = false; // Reset for next interaction
+        }
+
+        // --- Undo Function ---
+        function undo() {
+            if (undoStack.length === 0) {
+                showMessage("Nothing to undo!", 1000);
+                return;
+            }
+
+            const action = undoStack.pop();
+            redoStack.push(action); // Push to redo stack for potential re-application
+
+            if (action.type === 'add') {
+                // Undo an 'add' action: remove the block
+                scene.remove(action.mesh);
+                const index = blocks.indexOf(action.mesh);
+                if (index !== -1) {
+                    blocks.splice(index, 1);
+                }
+                showMessage("Undone: Block placed", 1000);
+            } else if (action.type === 'delete') {
+                // Undo a 'delete' action: re-add the block
+                scene.add(action.mesh);
+                // Re-insert into blocks array at original position to maintain order for future raycasting
+                blocks.splice(action.originalIndex, 0, action.mesh);
+                showMessage("Undone: Block deleted", 1000);
+            }
+            updateUndoRedoButtons();
+        }
+
+        // --- Redo Function ---
+        function redo() {
+            if (redoStack.length === 0) {
+                showMessage("Nothing to redo!", 1000);
+                return;
+            }
+
+            const action = redoStack.pop();
+            undoStack.push(action); // Push back to undo stack
+
+            if (action.type === 'add') {
+                // Redo an 'add' action: re-add the block
+                scene.add(action.mesh);
+                blocks.push(action.mesh); // Add to end, assuming order doesn't strictly matter for redo of add
+                showMessage("Redone: Block placed", 1000);
+            } else if (action.type === 'delete') {
+                // Redo a 'delete' action: re-delete the block
+                scene.remove(action.mesh);
+                const index = blocks.indexOf(action.mesh);
+                if (index !== -1) {
+                    blocks.splice(index, 1);
+                }
+                showMessage("Redone: Block deleted", 1000);
+            }
+            updateUndoRedoButtons();
+        }
+
+        // --- Generalized Interaction Logic (Place or Delete) ---
+        function handleInteraction() {
+            raycaster.setFromCamera(mouse, camera); // Use the actual mouse/touch coordinates from the event
+
+            // Intersect with the ground mesh and any existing blocks
+            const objectsToIntersect = [groundMesh, ...blocks];
+            const intersects = raycaster.intersectObjects(objectsToIntersect, true);
+
+            console.log("Raycaster origin:", raycaster.ray.origin.x, raycaster.ray.origin.y, raycaster.ray.origin.z);
+            console.log("Raycaster direction:", raycaster.ray.direction.x, raycaster.ray.direction.y, raycaster.ray.direction.z);
+            console.log("Intersects found:", intersects.length);
+
+            const selectedTool = blockTypes[selectedBlockTypeIndex];
+
+            if (selectedTool.name === 'Delete') {
+                // --- DELETE LOGIC ---
+                if (intersects.length > 0) {
+                    const intersect = intersects[0];
+                    const intersectedObject = intersect.object;
+
+                    if (intersectedObject === groundMesh) {
+                        showMessage("Cannot delete the ground!", 2000);
+                        return;
+                    }
+
+                    // Calculate distance to the intersected object for delete range check
+                    const distanceToDelete = camera.position.distanceTo(intersectedObject.position);
+                    if (distanceToDelete > MAX_PLACEMENT_DISTANCE) {
+                        showMessage("Too far to delete that block!", 2000);
+                        return;
+                    }
+
+                    // Find the index of the block in our 'blocks' array
+                    const indexToRemove = blocks.indexOf(intersectedObject);
+                    if (indexToRemove !== -1) {
+                        // Record action for undo/redo BEFORE performing it
+                        undoStack.push({
+                            type: 'delete',
+                            mesh: intersectedObject,
+                            blockTypeIndex: intersectedObject.userData.blockTypeIndex, // Store original type
+                            originalIndex: indexToRemove // Store original index for re-insertion
+                        });
+                        redoStack.length = 0; // Clear redo stack on new action
+
+                        scene.remove(intersectedObject); // Remove from Three.js scene
+                        blocks.splice(indexToRemove, 1); // Remove from our tracking array
+                        showMessage(`Deleted: ${selectedTool.name} block`, 1000);
+                        console.log("Block deleted:", intersectedObject.uuid);
+                        updateUndoRedoButtons();
+                    } else {
+                        showMessage("No block found to delete at this spot.", 2000);
+                    }
+                } else {
+                    showMessage("Nothing to delete here.", 2000);
+                }
+            } else {
+                // --- PLACE BLOCK LOGIC ---
+                if (intersects.length > 0) {
+                    const intersect = intersects[0];
+                    const point = intersect.point; // The exact intersection point
+                    const normal = intersect.face.normal;
+
+                    // Calculate distance to the intersection point for placement range check
+                    const distanceToPlace = camera.position.distanceTo(point);
+                    if (distanceToPlace > MAX_PLACEMENT_DISTANCE) {
+                        showMessage("Too far to place a block here!", 2000);
+                        return; // Stop placement if too far
+                    }
+
+                    // Transform the normal to world coordinates
+                    const worldNormal = new THREE.Vector3().copy(normal).transformDirection(intersect.object.matrixWorld);
+
+                    console.log("Intersected object:", intersect.object.name || intersect.object.uuid);
+                    console.log("Intersection point:", point.x, point.y, point.z);
+                    console.log("World Normal:", worldNormal.x, worldNormal.y, worldNormal.z);
+
+                    // Calculate the target position for the new block's center
+                    // Move the point by half a block size along the normal to place it on the surface
+                    let targetX = point.x + worldNormal.x * blockSize / 2;
+                    let targetY = point.y + worldNormal.y * blockSize / 2;
+                    let targetZ = point.z + worldNormal.z * blockSize / 2;
+
+                    // Snap to the nearest grid position (e.g., 0.5, 1.5, 2.5 for block centers)
+                    const snappedX = Math.floor(targetX) + blockSize / 2;
+                    const snappedY = Math.floor(targetY) + blockSize / 2;
+                    const snappedZ = Math.floor(targetZ) + blockSize / 2;
+
+                    // Ensure block is placed on top of the ground (Y-coordinate must be at least blockSize / 2)
+                    const finalY = Math.max(snappedY, blockSize / 2);
+
+                    console.log(`Attempting to place block at: X=${snappedX}, Y=${finalY}, Z=${snappedZ}`);
+                    createBlock(snappedX, finalY, snappedZ); // This function now records the undo action
+                } else {
+                    showMessage("Cannot place block here. Tap on the base or an existing block.", 2000);
+                }
+            }
+        }
+
+        function onKeyDown(event) {
+            // Number keys for hotbar selection (1-9)
+            const key = parseInt(event.key);
+            if (key >= 1 && key <= blockTypes.length) {
+                selectBlockType(key - 1);
+            }
+            // Keyboard shortcuts for undo/redo (e.g., Ctrl+Z, Ctrl+Y)
+            if (event.ctrlKey || event.metaKey) { // Ctrl for Windows/Linux, Cmd for Mac
+                if (event.key === 'z') {
+                    undo();
+                } else if (event.key === 'y') {
+                    redo();
+                }
+            }
+        }
+
+        // --- Create a Block (Three.js Mesh) ---
+        function createBlock(x, y, z) {
+            const selectedType = blockTypes[selectedBlockTypeIndex];
+            const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+            const material = selectedType.material;
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.blockTypeIndex = selectedBlockTypeIndex; // Store block type index on the mesh
+            scene.add(mesh);
+            blocks.push(mesh); // Add to blocks array for raycasting
+
+            // Record 'add' action for undo/redo
+            undoStack.push({ type: 'add', mesh: mesh, blockTypeIndex: selectedBlockTypeIndex });
+            redoStack.length = 0; // Clear redo stack on new action
+            updateUndoRedoButtons();
+
+            console.log("Block created and added to scene.");
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Only required if controls.enableDamping is set to true
+            renderer.render(scene, camera);
+        }
+
+        // Start the animation on window load.
+        window.onload = function () {
+            init();
+            animate();
+        };
+    </script>
+</body>
+</html>
