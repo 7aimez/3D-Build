@@ -185,8 +185,9 @@
             { name: 'Stone', color: '#808080', material: new THREE.MeshLambertMaterial({ color: '#808080' }) },
             { name: 'Wood', color: '#A0522D', material: new THREE.MeshLambertMaterial({ color: '#A0522D' }) },
             { name: 'Sand', color: '#F4A460', material: new THREE.MeshLambertMaterial({ color: '#F4A460' }) },
-            // NEW: Delete tool slot
-            { name: 'Delete', color: '#333333', isTool: true, icon: 'X' } // isTool flag and icon for delete
+            { name: 'Water', color: '#0095ff', material: new THREE.MeshLambertMaterial({ color: '#0095ff' }) },
+            { name: 'Glass', color: 'rgba(173, 173, 173, 0.08)', material: new THREE.MeshLambertMaterial({ color: 'rgba(173, 173, 173, 0.08)' }) },
+      		{ name: 'Delete', color: '#333333', isTool: true, icon: 'X' }
         ];
         let selectedBlockTypeIndex = 0; // Index of the currently selected block type
 
@@ -748,8 +749,6 @@
             undoStack.push({ type: 'add', mesh: mesh, blockTypeIndex: selectedBlockTypeIndex });
             redoStack.length = 0; // Clear redo stack on new action
             updateUndoRedoButtons();
-
-            console.log("Block created and added to scene.");
         }
 
         // --- Animation Loop ---
