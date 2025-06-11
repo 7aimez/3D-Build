@@ -7,6 +7,19 @@
     <script src="scripts/3.14.6.js"></script>
     <script src="scripts/three.min.js"></script>
     <script src="scripts/OrbitControls.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then((registration) => {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch((error) => {
+                    console.error('Service Worker registration failed:', error);
+                });
+        });
+    }
+</script>
     <style>
         @font-face {
             font-family: 'Inter';
