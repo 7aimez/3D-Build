@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Build - v2.1.2</title>
     <script src="scripts/3.14.6.js"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <script src="scripts/three.min.js"></script>
+    <script src="scripts/OrbitControls.js"></script>
     <style>
+        @font-face {
+            font-family: 'Inter';
+            src: url('fonts/inter/Inter-Regular.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
         body {
             margin: 0;
             overflow: hidden;
@@ -58,7 +65,6 @@
             height: 40px;
             border-radius: 4px;
             background-color: currentColor; /* Uses the color set by data-color */
-            /* For delete icon */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -162,13 +168,8 @@
         </div>
     </div>
 
-    <script src="scripts/three.min.js"></script>
-    <script src="scripts/OrbitControls.js"></script>
-
     <script>
         // Global variables for Firebase configuration and app ID (provided by the Canvas environment)
-        // These are included as per instructions, though not used in this specific app
-        // as it doesn't involve data persistence.
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -187,7 +188,7 @@
             { name: 'Sand', color: '#F4A460', material: new THREE.MeshLambertMaterial({ color: '#F4A460' }) },
             { name: 'Water', color: '#0095ff', material: new THREE.MeshLambertMaterial({ color: '#0095ff' }) },
             { name: 'Glass', color: 'rgba(173, 173, 173, 0.08)', material: new THREE.MeshLambertMaterial({ color: 'rgba(173, 173, 173, 0.08)' }) },
-      		{ name: 'Delete', color: '#333333', isTool: true, icon: 'X' }
+            { name: 'Delete', color: '#333333', isTool: true, icon: 'X' }
         ];
         let selectedBlockTypeIndex = 0; // Index of the currently selected block type
 
@@ -404,7 +405,7 @@
             canvas.addEventListener('mouseup', onMouseUp, false);
 
             // Touch events for mobile/tablet
-            canvas.addEventListener('touchstart', onTouchStart, { passive: false }); // passive:false to allow preventDefault
+            canvas.addEventListener('touchstart', onTouchStart, { passive: false });
             canvas.addEventListener('touchmove', onTouchMove, { passive: false });
             canvas.addEventListener('touchend', onTouchEnd, false);
 
@@ -479,17 +480,14 @@
             camera.aspect = window.innerWidth / (window.innerHeight - 80);
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight - 80);
-            // Update canvas dimensions on resize
             canvasRect = document.getElementById('gameCanvas').getBoundingClientRect();
             console.log("Canvas resized. New dimensions:", canvasRect.width, canvasRect.height);
         }
 
         function onMouseMove(event) {
-            // This is primarily for OrbitControls to work correctly with mouse
             mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
             mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
 
-            // Check if a drag has started (only if left button is pressed)
             if (event.buttons === 1) {
                 const dx = event.clientX - initialClickX;
                 const dy = event.clientY - initialClickY;
@@ -510,8 +508,6 @@
         function onMouseUp(event) {
             if (event.button === 0) { // Left-click released
                 if (!isDragging) {
-                    // It was a click/tap, not a drag, so handle interaction
-                    // Use the coordinates from the mouseup event
                     mouse.x = ((event.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
                     mouse.y = -((event.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
                     handleInteraction(); // Call the new generalized handler
@@ -523,15 +519,12 @@
         // Touch Events
         function onTouchStart(event) {
             if (event.touches.length === 1) {
-                // Single touch, potential tap
                 initialClickX = event.touches[0].clientX;
                 initialClickY = event.touches[0].clientY;
                 isDragging = false; // Assume not dragging initially
             } else if (event.touches.length > 1) {
-                // Multi-touch, definitely a drag for camera controls
                 isDragging = true;
             }
-            // Prevent default behavior (like scrolling/zooming) to allow OrbitControls and our logic
             event.preventDefault();
         }
 
@@ -543,18 +536,13 @@
                     isDragging = true;
                 }
             } else if (event.touches.length > 1) {
-                isDragging = true; // Confirm dragging if multi-touch
+                isDragging = true;
             }
-            // Prevent default behavior (like scrolling/zooming)
             event.preventDefault();
         }
 
         function onTouchEnd(event) {
-            // Check if it was a single tap (no dragging occurred)
-            // event.changedTouches.length === 1 helps identify if the primary touch ended
             if (!isDragging && event.changedTouches.length === 1) {
-                // It was a tap, not a drag, so handle interaction
-                // Use the coordinates from the touch that just ended
                 const touch = event.changedTouches[0];
                 mouse.x = ((touch.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
                 mouse.y = -((touch.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
@@ -574,7 +562,6 @@
             redoStack.push(action); // Push to redo stack for potential re-application
 
             if (action.type === 'add') {
-                // Undo an 'add' action: remove the block
                 scene.remove(action.mesh);
                 const index = blocks.indexOf(action.mesh);
                 if (index !== -1) {
@@ -582,9 +569,7 @@
                 }
                 showMessage("Undone: Block placed", 1000);
             } else if (action.type === 'delete') {
-                // Undo a 'delete' action: re-add the block
                 scene.add(action.mesh);
-                // Re-insert into blocks array at original position to maintain order for future raycasting
                 blocks.splice(action.originalIndex, 0, action.mesh);
                 showMessage("Undone: Block deleted", 1000);
             }
@@ -602,12 +587,10 @@
             undoStack.push(action); // Push back to undo stack
 
             if (action.type === 'add') {
-                // Redo an 'add' action: re-add the block
                 scene.add(action.mesh);
-                blocks.push(action.mesh); // Add to end, assuming order doesn't strictly matter for redo of add
+                blocks.push(action.mesh);
                 showMessage("Redone: Block placed", 1000);
             } else if (action.type === 'delete') {
-                // Redo a 'delete' action: re-delete the block
                 scene.remove(action.mesh);
                 const index = blocks.indexOf(action.mesh);
                 if (index !== -1) {
@@ -620,20 +603,13 @@
 
         // --- Generalized Interaction Logic (Place or Delete) ---
         function handleInteraction() {
-            raycaster.setFromCamera(mouse, camera); // Use the actual mouse/touch coordinates from the event
-
-            // Intersect with the ground mesh and any existing blocks
+            raycaster.setFromCamera(mouse, camera);
             const objectsToIntersect = [groundMesh, ...blocks];
             const intersects = raycaster.intersectObjects(objectsToIntersect, true);
-
-            console.log("Raycaster origin:", raycaster.ray.origin.x, raycaster.ray.origin.y, raycaster.ray.origin.z);
-            console.log("Raycaster direction:", raycaster.ray.direction.x, raycaster.ray.direction.y, raycaster.ray.direction.z);
-            console.log("Intersects found:", intersects.length);
 
             const selectedTool = blockTypes[selectedBlockTypeIndex];
 
             if (selectedTool.name === 'Delete') {
-                // --- DELETE LOGIC ---
                 if (intersects.length > 0) {
                     const intersect = intersects[0];
                     const intersectedObject = intersect.object;
@@ -643,29 +619,24 @@
                         return;
                     }
 
-                    // Calculate distance to the intersected object for delete range check
                     const distanceToDelete = camera.position.distanceTo(intersectedObject.position);
                     if (distanceToDelete > MAX_PLACEMENT_DISTANCE) {
                         showMessage("Too far to delete that block!", 2000);
                         return;
                     }
 
-                    // Find the index of the block in our 'blocks' array
                     const indexToRemove = blocks.indexOf(intersectedObject);
                     if (indexToRemove !== -1) {
-                        // Record action for undo/redo BEFORE performing it
                         undoStack.push({
                             type: 'delete',
                             mesh: intersectedObject,
-                            blockTypeIndex: intersectedObject.userData.blockTypeIndex, // Store original type
-                            originalIndex: indexToRemove // Store original index for re-insertion
+                            originalIndex: indexToRemove
                         });
                         redoStack.length = 0; // Clear redo stack on new action
 
-                        scene.remove(intersectedObject); // Remove from Three.js scene
-                        blocks.splice(indexToRemove, 1); // Remove from our tracking array
+                        scene.remove(intersectedObject);
+                        blocks.splice(indexToRemove, 1);
                         showMessage(`Deleted: ${selectedTool.name} block`, 1000);
-                        console.log("Block deleted:", intersectedObject.uuid);
                         updateUndoRedoButtons();
                     } else {
                         showMessage("No block found to delete at this spot.", 2000);
@@ -674,42 +645,28 @@
                     showMessage("Nothing to delete here.", 2000);
                 }
             } else {
-                // --- PLACE BLOCK LOGIC ---
                 if (intersects.length > 0) {
                     const intersect = intersects[0];
-                    const point = intersect.point; // The exact intersection point
+                    const point = intersect.point;
                     const normal = intersect.face.normal;
 
-                    // Calculate distance to the intersection point for placement range check
                     const distanceToPlace = camera.position.distanceTo(point);
                     if (distanceToPlace > MAX_PLACEMENT_DISTANCE) {
                         showMessage("Too far to place a block here!", 2000);
-                        return; // Stop placement if too far
+                        return;
                     }
 
-                    // Transform the normal to world coordinates
                     const worldNormal = new THREE.Vector3().copy(normal).transformDirection(intersect.object.matrixWorld);
-
-                    console.log("Intersected object:", intersect.object.name || intersect.object.uuid);
-                    console.log("Intersection point:", point.x, point.y, point.z);
-                    console.log("World Normal:", worldNormal.x, worldNormal.y, worldNormal.z);
-
-                    // Calculate the target position for the new block's center
-                    // Move the point by half a block size along the normal to place it on the surface
                     let targetX = point.x + worldNormal.x * blockSize / 2;
                     let targetY = point.y + worldNormal.y * blockSize / 2;
                     let targetZ = point.z + worldNormal.z * blockSize / 2;
 
-                    // Snap to the nearest grid position (e.g., 0.5, 1.5, 2.5 for block centers)
                     const snappedX = Math.floor(targetX) + blockSize / 2;
                     const snappedY = Math.floor(targetY) + blockSize / 2;
                     const snappedZ = Math.floor(targetZ) + blockSize / 2;
 
-                    // Ensure block is placed on top of the ground (Y-coordinate must be at least blockSize / 2)
                     const finalY = Math.max(snappedY, blockSize / 2);
-
-                    console.log(`Attempting to place block at: X=${snappedX}, Y=${finalY}, Z=${snappedZ}`);
-                    createBlock(snappedX, finalY, snappedZ); // This function now records the undo action
+                    createBlock(snappedX, finalY, snappedZ);
                 } else {
                     showMessage("Cannot place block here. Tap on the base or an existing block.", 2000);
                 }
@@ -717,13 +674,11 @@
         }
 
         function onKeyDown(event) {
-            // Number keys for hotbar selection (1-9)
             const key = parseInt(event.key);
             if (key >= 1 && key <= blockTypes.length) {
                 selectBlockType(key - 1);
             }
-            // Keyboard shortcuts for undo/redo (e.g., Ctrl+Z, Ctrl+Y)
-            if (event.ctrlKey || event.metaKey) { // Ctrl for Windows/Linux, Cmd for Mac
+            if (event.ctrlKey || event.metaKey) {
                 if (event.key === 'z') {
                     undo();
                 } else if (event.key === 'y') {
@@ -741,13 +696,12 @@
             mesh.position.set(x, y, z);
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            mesh.userData.blockTypeIndex = selectedBlockTypeIndex; // Store block type index on the mesh
+            mesh.userData.blockTypeIndex = selectedBlockTypeIndex;
             scene.add(mesh);
-            blocks.push(mesh); // Add to blocks array for raycasting
+            blocks.push(mesh);
 
-            // Record 'add' action for undo/redo
-            undoStack.push({ type: 'add', mesh: mesh, blockTypeIndex: selectedBlockTypeIndex });
-            redoStack.length = 0; // Clear redo stack on new action
+            undoStack.push({ type: 'add', mesh: mesh });
+            redoStack.length = 0;
             updateUndoRedoButtons();
         }
 
